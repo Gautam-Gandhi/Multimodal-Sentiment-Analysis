@@ -18,9 +18,9 @@ env/
 best_model.pt
 checkpoint*.pt
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
+# # Jupyter
+# .ipynb_checkpoints/
+# *.ipynb
 
 # IDE
 .vscode/
@@ -35,3 +35,6 @@ Thumbs.db
 # Logs (keep experiments.md, gitignore run artifacts)
 logs/*.json
 logs/*.txt
+
+#data
+data/*
