@@ -333,10 +333,12 @@ class MultiTaskModel(nn.Module):
     def forward(self, token_ids, audio, video, av_mask,
                 bert_ids=None, bert_mask=None, bert_type_ids=None):
         """
-        Returns dict: {modality_name: logits, ..., 'fusion': y_m, 'recon': y_m_prime}
-        All values are (batch, num_classes) logits.
+        Returns:
+            preds  : dict  {modality_name: logits, ..., 'fusion': y_m, 'recon': y_m_prime}
+            pooled : dict  {modality_name: (batch, d_m) mean-pooled UFEN output}
+        All logits are (batch, num_classes).
         """
-        feats, masks, preds = {}, {}, {}
+        feats, masks, preds, pooled = {}, {}, {}, {}
 
         # ---- Text ----
         if 'text' in self.modalities:
@@ -355,6 +357,7 @@ class MultiTaskModel(nn.Module):
             feats['text'] = feat_t
             masks['text'] = t_mask
             preds['text'] = y_t
+            pooled['text'] = masked_mean(feat_t, t_mask)
 
         # ---- Video ----
         if 'video' in self.modalities:
@@ -366,6 +369,7 @@ class MultiTaskModel(nn.Module):
             feats['video'] = feat_v
             masks['video'] = av_mask
             preds['video'] = y_v
+            pooled['video'] = masked_mean(feat_v, av_mask)
 
         # ---- Audio ----
         if 'audio' in self.modalities:
@@ -374,6 +378,7 @@ class MultiTaskModel(nn.Module):
             feats['audio'] = feat_a
             masks['audio'] = av_mask
             preds['audio'] = y_a
+            pooled['audio'] = masked_mean(feat_a, av_mask)
 
         # ---- MTFN (skipped for single-modality — reuse unimodal pred) ----
         if self.mtfn is not None:
@@ -386,4 +391,4 @@ class MultiTaskModel(nn.Module):
             preds['fusion'] = sole
             preds['recon'] = sole
 
-        return preds
+        return preds, pooled

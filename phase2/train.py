@@ -143,7 +143,7 @@ def evaluate(model, loader, device, use_bert=False):
         for batch in loader:
             b = unpack_batch(batch, device, use_bert)
             with autocast('cuda', enabled=use_amp):
-                preds_dict = model(
+                preds_dict, _ = model(
                     b['token_ids'], b['audio'], b['video'], b['av_mask'],
                     b.get('bert_ids'), b.get('bert_mask'), b.get('bert_type_ids'),
                 )
@@ -300,7 +300,7 @@ def train():
             b = unpack_batch(batch, device, use_bert)
 
             with autocast('cuda', enabled=use_amp):
-                preds_dict = model(
+                preds_dict, _ = model(
                     b['token_ids'], b['audio'], b['video'], b['av_mask'],
                     b.get('bert_ids'), b.get('bert_mask'), b.get('bert_type_ids'),
                 )

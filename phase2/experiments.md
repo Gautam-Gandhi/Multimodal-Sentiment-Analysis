@@ -750,4 +750,189 @@ Disgust      15     8     3     8     0    19    15
 Anger        40    51    18    19    26    13   178
 ```
 
+---
+
+## Exp 8 — OGM-GE + Cross-Modal InfoNCE + Scheduled Modality Training (BERT, 3-modal)
+
+**Goal:** Add three research-backed mechanisms on top of Exp 6 to (a) prevent the dominant modality
+(text/BERT) from starving the audio/video branches of gradient, (b) explicitly align the unimodal
+representations in a shared embedding space, and (c) give the slower modalities a head-start before
+joint fusion. Implemented in [phase2/train_enhanced.py](phase2/train_enhanced.py).
+
+**Changes from Exp 6 (the BERT 3-modal baseline):**
+
+1. **OGM-GE — On-the-fly Gradient Modulation with Generalization Enhancement**
+   *Peng, X., Wei, Y., Deng, A., Wang, D., Hu, D. "Balanced Multimodal Learning via On-the-fly
+   Gradient Modulation." CVPR 2022.*
+   After `backward()` (post `unscale_`), measure the L2 norm of grads on each `ufen_{t,a,v}` branch
+   and rescale weaker branches up to the strongest one (capped at `max_scale=10`, scale only if
+   ratio > 1.05). Counters the well-known imbalance where the strong modality (BERT-text here)
+   monopolises the cross-entropy gradient and the audio/video branches collapse. See
+   [train_enhanced.py:159-187](phase2/train_enhanced.py#L159-L187).
+
+2. **Cross-modal contrastive alignment loss (symmetric InfoNCE)**
+   *van den Oord, A., Li, Y., Vinyals, O. "Representation Learning with Contrastive Predictive
+   Coding." arXiv 2018* (InfoNCE objective); applied cross-modal as in *Radford et al. "Learning
+   Transferable Visual Models From Natural Language Supervision" (CLIP), ICML 2021*.
+   For each pair {text–audio, text–video, audio–video} of pooled UFEN embeddings, pull same-sample
+   pairs together and push other in-batch pairs apart with `temperature=0.07` and weight
+   `λ_align = 0.1`. Encourages a shared cross-modal latent before MTFN fusion. See
+   [train_enhanced.py:143-152](phase2/train_enhanced.py#L143-L152).
+
+3. **Scheduled (curriculum) modality training**
+   Motivated by *Wang, W., Tran, D., Feiszli, M. "What Makes Training Multi-modal Classification
+   Networks Hard?" CVPR 2020* (Gradient-Blending), and the broader curriculum-learning idea of
+   *Bengio et al. "Curriculum Learning," ICML 2009*. Three phases:
+   - **Phase A (epochs 1–3) — audio/video pre-train.** Freeze BERT, `ufen_t`, `norm_t`, and MTFN.
+     Loss = CE(audio) + CE(video). Gives the weak modalities a chance to learn before BERT
+     dominates the joint loss.
+   - **Phase B (epochs 4–6) — all unimodal, no fusion.** Unfreeze text branch but keep MTFN frozen.
+     Loss = CE(text) + CE(audio) + CE(video) + λ_align · L_InfoNCE. OGM-GE active.
+   - **Phase C (epoch 7+) — full end-to-end.** Unfreeze MTFN. Loss = Σ_m CE(m) + CE(fusion) +
+     CE(recon) + λ_align · L_InfoNCE. OGM-GE active.
+
+   Schedule logic in [train_enhanced.py:299-339](phase2/train_enhanced.py#L299-L339);
+   loss assembly in [train_enhanced.py:354-376](phase2/train_enhanced.py#L354-L376).
+
+All else is identical to Exp 6: BERT-base-uncased, batch_size=16, `lr_bert=2e-5`, `lr=1e-3`,
+3-epoch BERT warmup, cosine schedule, label_smoothing=0.1, class weights, fp16 AMP,
+`grad_clip=1.0`, `early_stop=10`. Trainable parameters: 111,444,323 (same as Exp 6).
+
+**Training log:**
+```
+Epoch 01 [A: audio/video pre-train] | loss=4.5200 | Acc= 2.0 | F1w= 0.1 | F1m= 0.6  <- new best
+Epoch 02 [A: audio/video pre-train] | loss=4.4910 | Acc= 2.0 | F1w= 0.1 | F1m= 0.6
+Epoch 03 [A: audio/video pre-train] | loss=4.4891 | Acc= 2.0 | F1w= 0.1 | F1m= 0.6
+Epoch 04 [B: all unimodal]          | loss=7.1408 | Acc= 3.2 | F1w= 1.9 | F1m= 2.0  <- new best
+Epoch 05 [B: all unimodal]          | loss=6.7302 | Acc= 6.1 | F1w= 4.2 | F1m= 4.8  <- new best
+Epoch 06 [B: all unimodal]          | loss=6.4289 | Acc= 9.9 | F1w=10.5 | F1m= 6.8  <- new best
+Epoch 07 [C: full + contrastive]    | loss=9.1973 | Acc=56.7 | F1w=57.3 | F1m=44.6  <- new best
+Epoch 08 [C: full + contrastive]    | loss=8.7110 | Acc=59.0 | F1w=57.5 | F1m=43.6  <- new best
+Epoch 09 [C: full + contrastive]    | loss=8.4398 | Acc=57.9 | F1w=57.1 | F1m=44.8
+Epoch 10 [C: full + contrastive]    | loss=8.3098 | Acc=58.5 | F1w=57.3 | F1m=44.1
+Epoch 11 [C: full + contrastive]    | loss=8.1983 | Acc=58.4 | F1w=58.0 | F1m=45.3  <- new best
+Epoch 12 [C: full + contrastive]    | loss=8.0655 | Acc=58.2 | F1w=56.8 | F1m=42.9
+Epoch 13 [C: full + contrastive]    | loss=7.9954 | Acc=57.1 | F1w=55.5 | F1m=41.2
+Epoch 14 [C: full + contrastive]    | loss=7.9032 | Acc=58.8 | F1w=57.5 | F1m=43.6
+Epoch 15 [C: full + contrastive]    | loss=7.8898 | Acc=57.2 | F1w=55.5 | F1m=42.1
+Epoch 16 [C: full + contrastive]    | loss=7.8601 | Acc=59.2 | F1w=57.4 | F1m=45.4
+Epoch 17 [C: full + contrastive]    | loss=7.8049 | Acc=58.1 | F1w=55.7 | F1m=40.8
+Epoch 18 [C: full + contrastive]    | loss=7.7978 | Acc=60.7 | F1w=59.2 | F1m=46.3  <- new best
+Epoch 19 [C: full + contrastive]    | loss=7.7121 | Acc=58.9 | F1w=57.8 | F1m=45.8
+Epoch 20 [C: full + contrastive]    | loss=7.6658 | Acc=59.1 | F1w=57.9 | F1m=44.2
+Epoch 21 [C: full + contrastive]    | loss=7.6813 | Acc=58.5 | F1w=56.5 | F1m=43.0
+Epoch 22 [C: full + contrastive]    | loss=7.6498 | Acc=60.0 | F1w=58.3 | F1m=45.7
+Epoch 23 [C: full + contrastive]    | loss=7.6391 | Acc=58.0 | F1w=56.8 | F1m=43.7
+Epoch 24 [C: full + contrastive]    | loss=7.6049 | Acc=59.3 | F1w=57.5 | F1m=45.9
+Epoch 25 [C: full + contrastive]    | loss=7.5973 | Acc=59.9 | F1w=57.9 | F1m=45.8
+Epoch 26 [C: full + contrastive]    | loss=7.5474 | Acc=59.2 | F1w=57.4 | F1m=46.2
+Epoch 27 [C: full + contrastive]    | loss=7.5423 | Acc=58.5 | F1w=56.7 | F1m=43.9
+Epoch 28 [C: full + contrastive]    | loss=7.5644 | Acc=59.5 | F1w=57.6 | F1m=44.0
+Early stopping: no improvement for 10 epochs (best at epoch 18).
+```
+
+**Test results (best checkpoint: epoch 18):**
+```
+Accuracy       : 60.3
+F1 (weighted)  : 59.4
+F1 (macro)     : 43.3
+```
+
+**Per-class breakdown:**
+```
+              precision    recall  f1-score   support
+
+     Neutral       0.73      0.77      0.75      1256
+    Surprise       0.46      0.61      0.52       281
+        Fear       0.22      0.16      0.19        50
+     Sadness       0.41      0.22      0.29       208
+         Joy       0.59      0.57      0.58       402
+     Disgust       0.35      0.25      0.29        68
+       Anger       0.42      0.40      0.41       345
+```
+
+**Confusion matrix:**
+```
+           Neut  Surp  Fear  Sadn   Joy  Disg  Ange
+Neutral     965    85    12    39    75    10    70
+Surprise     39   172     0     3    29     2    36
+Fear         19     9     8     5     2     0     7
+Sadness      91    13     7    46    17     7    27
+Joy          93    32     2     5   230     2    38
+Disgust      23    10     1     4     2    17    11
+Anger        92    55     6     9    36    10   137
+```
+
+**Comparison vs Exp 6 (BERT 3-modal baseline):**
+
+| Metric        | Exp 6 | Exp 8 | Δ |
+|---|---|---|---|
+| Accuracy      | 61.0  | 60.3  | **−0.7** |
+| F1 (weighted) | 60.3  | 59.4  | **−0.9** |
+| F1 (macro)    | 42.8  | 43.3  | **+0.5** |
+| Best epoch    | 7     | 18    | +11 |
+| Total epochs  | 17    | 28    | +11 |
+
+**Per-class F1 vs Exp 6:**
+
+| Class    | Exp 6 | Exp 8 | Δ |
+|---|---|---|---|
+| Neutral  | 0.76  | 0.75  | −0.01 |
+| Surprise | 0.53  | 0.52  | −0.01 |
+| Fear     | 0.17  | 0.19  | **+0.02** |
+| Sadness  | 0.27  | 0.29  | **+0.02** |
+| Joy      | 0.58  | 0.58  |  0.00 |
+| Disgust  | 0.23  | 0.29  | **+0.06** |
+| Anger    | 0.46  | 0.41  | **−0.05** |
+
+**Analysis:**
+- **Net result is roughly a wash on weighted metrics, with a tiny macro-F1 gain.** The three
+  interventions did not break through the Exp 6 ceiling. Disgust (+0.06) is the only sizeable
+  per-class win; Anger regressed by an almost-equal amount (−0.05). Fear and Sadness moved
+  +0.02 each, but recall on both is still under 25%.
+- **Phase A is wasted compute.** With BERT/text frozen and MTFN frozen, the audio+video CE loss
+  barely moves (Acc ≈ 2%, F1w ≈ 0.1) for three full epochs. The audio (Wave2Vec2.0, 32-dim) and
+  video (ResNet-101, 2048-dim) features alone simply do not carry enough signal on MELD to drive
+  any learning without the text branch — which is exactly the *opposite* of the underlying
+  assumption that "weaker modalities need a head-start." On MELD, the weak modalities are not
+  learnable in isolation; their value is only unlocked when conditioned on text.
+- **Phase B is also weak.** Even with text unfrozen and contrastive alignment on, F1w only reaches
+  10.5 by epoch 6 — nowhere near where Exp 6 was at the same epoch (≈58). Freezing MTFN means
+  there is no fused-classifier signal back-propagating through the cross-modal interactions, and
+  the unimodal heads alone are not enough.
+- **Phase C recovers but pays an 11-epoch penalty.** Once MTFN is unfrozen at epoch 7, the model
+  jumps to F1w=57.3 in a single epoch — almost matching Exp 6's epoch-7 number (59.6). It then
+  drifts up slowly to 59.2 at epoch 18 and early-stops at epoch 28. So the schedule effectively
+  threw away 6 epochs and converged 11 epochs later to a slightly *worse* point.
+- **OGM-GE and InfoNCE alone (without the schedule) are not isolated here.** Because all three
+  changes were stacked, we cannot attribute the small Disgust/Sadness/Fear gains to OGM-GE vs
+  InfoNCE vs the schedule. The net effect of the bundle is neutral on F1w / +0.5 on F1m.
+- **The contrastive temperature/weight may also be a factor.** `λ_align=0.1`, `T=0.07` are
+  CLIP-style defaults; with batch size 16, the InfoNCE denominator only has 15 negatives per
+  anchor, which is a very thin contrastive signal compared to the regimes those values were
+  tuned for.
+
+**Key takeaway:** On MELD, scheduled modality unfreezing hurts more than it helps because the
+non-text modalities cannot learn anything meaningful in isolation — text is not just a "stronger"
+modality, it is the *only* modality that carries first-order class information. Gradient
+modulation and cross-modal alignment, applied on top of an already strong BERT backbone, give
+sub-1-pt fluctuations rather than a real lift.
+
+**Recommended next changes (Exp 8b candidates):**
+1. **Drop Phases A and B; keep only OGM-GE + InfoNCE from epoch 1.** This isolates the gradient
+   modulation and alignment effects from the curriculum, and recovers the 11 wasted epochs.
+2. **If a curriculum is still wanted, invert it:** start with text+fusion (the strong path),
+   *then* introduce audio/video later as auxiliary heads. This matches the actual information
+   hierarchy on MELD.
+3. **Tune InfoNCE for the small-batch regime.** Try `λ_align ∈ {0.05, 0.2, 0.5}` and
+   `temperature ∈ {0.1, 0.2}`. With batch=16, a higher temperature (softer distribution) usually
+   helps because the denominator is so small. Alternatively, accumulate a memory bank / queue
+   of past embeddings (MoCo-style, *He et al. 2020*) to enlarge the negative pool without
+   increasing GPU memory.
+4. **Cap OGM-GE more aggressively.** `max_scale=10` is permissive — when the audio branch has
+   a near-zero gradient norm (as it does when it has not yet learned anything), the 10× boost
+   amplifies noise. Try `max_scale ∈ {2, 3}` and the GE term from the original paper
+   (Gaussian noise on the boosted gradient) to stabilise it.
+5. **Ablate one change at a time** so we can attribute the Disgust gain to a specific mechanism
+   rather than a stack of three.
 

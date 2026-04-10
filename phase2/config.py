@@ -30,7 +30,7 @@ config = SimpleNamespace(
     # --- modality selection (for ablation studies) ---
     # Full 3-modal: ['text', 'audio', 'video']
     # Bimodal ablations: ['text', 'audio'] | ['text', 'video'] | ['audio', 'video']
-    modalities=['text'],            # Ablation Exp 7c: text only (BERT unimodal)
+    modalities=['text', 'audio', 'video'],   # full 3-modal
 
     # --- text encoder ---
     use_bert=True,        # BERT contextual embeddings (768-dim)
