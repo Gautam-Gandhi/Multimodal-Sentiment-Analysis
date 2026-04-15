@@ -140,7 +140,9 @@ See [`report/main.pdf`](report/main.pdf) §4 (Methodology) for full details and 
 **TokeNization**
 
 - Parth Tokekar
-- (team members)
+- Gautam Gandhi
+- Manas Inamdar
+- Soham Jahagirdar
 
 Course: Introduction to NLP (S26), IIIT Hyderabad.
 
