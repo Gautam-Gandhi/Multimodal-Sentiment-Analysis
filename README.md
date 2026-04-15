@@ -34,8 +34,8 @@ Phase 2's best model uses just **3.58M parameters** (vs 110.9M for the fine-tune
 │   ├── README.md
 │   ├── src/                  model.py, train.py, data_loader.py, create_dataset.py
 │   ├── docs/                 assumptions.md, experiments.md, research_paper.md
-│   ├── report/               Mid-submission LaTeX report + architecture figure
-│   └── assets/               Dataset stats + reference-paper figures
+│   └── report/               Mid-submission LaTeX report + figures
+|   └── data/                 Preprocessed CMU-MOSI data
 │
 ├── phase2/                   MELD — MHFT + UFEN+MTFN
 │   ├── README.md
@@ -48,14 +48,11 @@ Phase 2's best model uses just **3.58M parameters** (vs 110.9M for the fine-tune
 │   ├── main.pdf
 │   └── figures/
 │
-├── presentation/             Beamer slides (Metropolis theme, 16:9)
-│   ├── presentation.tex
-│   ├── presentation.pdf
-│   └── figures/
-│
-└── data/                     Not tracked in git
-    ├── MOSI/                 Preprocessed CMU-MOSI (embedding_and_mapping.pt)
-    └── MELD/                 MELD utterances and features
+└── presentation/             Beamer slides (Metropolis theme, 16:9)
+    ├── presentation.tex
+    ├── presentation.pdf
+    └── figures/
+
 ```
 
 Checkpoints for both phases are hosted separately (see each phase's README for paths).
