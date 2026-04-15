@@ -1,194 +1,148 @@
-# Multimodal Sentiment Analysis — UFEN + MTFN (Implementation v2)
+# Multimodal Sentiment & Emotion Analysis
 
-Replication of **Cai et al., "Multimodal sentiment analysis based on multi-layer feature fusion and multi-task learning"**, *Scientific Reports* (2025) 15:2126.  
-DOI: [10.1038/s41598-025-85859-6](https://doi.org/10.1038/s41598-025-85859-6)
+**INLP Spring 2026 · Team TokeNization**
 
-This is a from-scratch implementation of the UFEN + MTFN architecture evaluated on the **CMU-MOSI** dataset, with systematic hyperparameter tuning across 25+ experiments.
+A two-phase study of multimodal sentiment/emotion analysis using the **UFEN + MTFN** architecture of Cai et al. (2025):
 
----
-
-## Architecture Overview
-
-The model has three stages:
-
-### 1. Feature Extraction
-- **Text**: `bert-base-uncased` — fine-tuned during training; outputs contextual word embeddings (batch × 52 × 768) fed into the text UFEN.
-- **Visual**: 47-dim FACET features, padded per-utterance.
-- **Audio**: 74-dim COVAREP features, padded per-utterance.
-
-### 2. UFEN — Unimodal Feature Extraction Network (×3)
-One UFEN instance per modality. Each runs identically:
-
-```
-Input (batch, T, D_i)
-  └─ BiGRU  (D_i → d_m)
-       └─ N parallel branches, each:
-            Conv1D(d_m → conv_dim, kernel=k_i)  → ReLU
-            Self-Attention gate: X * MHA(X, X, X)
-            Unpool: Linear(conv_dim → d_m)
-       └─ Element-wise sum over branches
-       └─ LayerNorm + Dropout
-       └─ Mean-pool → Linear(d_m → 1)   → unimodal prediction Y_i
-  Output: (batch, T, d_m),  Y_i (batch,)
-```
-
-### 3. MTFN — Multi-Task Fusion Network
-```
-3 × UFEN outputs (feat_t, feat_v, feat_a)
-  └─ Linear projection per modality (W_i X_i + b_i)
-  └─ 6 directed cross-modal attention pairs:
-       t→v,  t→a,  v→t,  v→a,  a→t,  a→v
-  └─ Mean-pool each → stack → (batch, 6, d_m)   [6-token sequence]
-  └─ Y_m = Linear(6×d_m → 1)                    [direct fusion prediction]
-  └─ Transformer Encoder (Self-Att + FFN + LayerNorm)
-  └─ Transformer Decoder (Cross-Att + FFN + LayerNorm)
-  └─ Mean-pool decoder output → Linear(d_m → 1) → Y_m'  [final prediction]
-```
-
-### 4. Multi-Task Loss
-Five MSE losses summed with equal weight:
-
-$$\mathcal{L} = \text{MSE}(Y_t, Y) + \text{MSE}(Y_v, Y) + \text{MSE}(Y_a, Y) + \text{MSE}(Y_m, Y) + \text{MSE}(Y'_m, Y)$$
-
-Final evaluation uses $Y'_m$ (the encoder-decoder output head).
-
-**Total parameters: ~110.8M** (dominated by `bert-base-uncased` at 110M).
+- **Phase 1 — CMU-MOSI** (regression, sentiment intensity ∈ [-3, +3]): from-scratch replication with BERT + COVAREP + FACET features.
+- **Phase 2 — MELD** (7-class emotion classification): extension of the same backbone to conversational emotion, with a new **Multi-Head Feature Tokenization (MHFT)** front-end that lets UFEN consume utterance-level features (RoBERTa, openSMILE, DenseNet). The best model beats a 110M-param BERT baseline at **30× fewer parameters**.
 
 ---
 
-## Project Structure
+## Headline Results
 
-```
-├── model.py               Full model: UFEN, CrossModalAttention, MTFN, MultiTaskModel
-├── train.py               Training + evaluation pipeline with all hyperparameters
-├── data_loader.py         DataLoader with padding-mask generation
-├── create_dataset.py      Dataset preprocessing / pkl builder
-├── assumptions.md         All architecture decisions where the paper was ambiguous
-├── data/
-│   └── MOSI/
-│       ├── embedding_and_mapping.pt   Preprocessed CMU-MOSI data (3 MB)
-│       └── README.md
-├── logs/
-│   └── experiments.md     Full experiment plan + all results (25+ experiments)
-└── research_paper/
-    └── research_paper.md  Paper notes and annotated content
-```
+| Phase | Dataset | Best Model | Key Metric | Score |
+|---|---|---|---|---|
+| 1 | CMU-MOSI | UFEN+MTFN (P3-2) | MAE ↓ / Acc-2 (neg/pos) ↑ | **0.812 / 80.3%** |
+| 2 | MELD | MHFT + UFEN+MTFN (Exp 9.1) | F1w / F1m | **64.4 / 49.0** |
+
+Phase 2's best model uses just **3.58M parameters** (vs 110.9M for the fine-tuned BERT baseline in Exp 6).
 
 ---
 
-## Setup
+## Repository Structure
 
-### Requirements
+```
+.
+├── README.md                 This file
+├── Project_Details.md        Course-provided project brief
+│
+├── proposal/
+│   └── INLP_Project_Proposal_Team_TokeNization.pdf
+│
+├── phase1/                   CMU-MOSI — UFEN+MTFN replication
+│   ├── README.md
+│   ├── src/                  model.py, train.py, data_loader.py, create_dataset.py
+│   ├── docs/                 assumptions.md, experiments.md, research_paper.md
+│   ├── report/               Mid-submission LaTeX report + architecture figure
+│   └── assets/               Dataset stats + reference-paper figures
+│
+├── phase2/                   MELD — MHFT + UFEN+MTFN
+│   ├── README.md
+│   ├── src/                  model.py, train.py, train_enhanced.py, data_loader.py, config.py
+│   ├── notebooks/            01_baseline_bert, 02_multiemo_features, 03_mhft_ufen_best, 04_mlp_baseline
+│   └── docs/                 experiments.md, implementation_plan.md
+│
+├── report/                   Final submission (ACL 9-page format)
+│   ├── main.tex
+│   ├── main.pdf
+│   └── figures/
+│
+├── presentation/             Beamer slides (Metropolis theme, 16:9)
+│   ├── presentation.tex
+│   ├── presentation.pdf
+│   └── figures/
+│
+└── data/                     Not tracked in git
+    ├── MOSI/                 Preprocessed CMU-MOSI (embedding_and_mapping.pt)
+    └── MELD/                 MELD utterances and features
+```
+
+Checkpoints for both phases are hosted separately (see each phase's README for paths).
+
+---
+
+## Deliverables
+
+| File | Contents |
+|---|---|
+| [`report/main.pdf`](report/main.pdf) | 9-page ACL-style final report covering both phases |
+| [`presentation/presentation.pdf`](presentation/presentation.pdf) | Beamer slides for the final walkthrough |
+| [`phase1/docs/experiments.md`](phase1/docs/experiments.md) | Phase 1 experiment log (25+ runs) |
+| [`phase2/docs/experiments.md`](phase2/docs/experiments.md) | Phase 2 experiment log (Exp 1 → 9.1) |
+
+---
+
+## Quick Start
+
+### Setup
 
 ```bash
-pip install torch transformers numpy scikit-learn
+pip install torch transformers numpy scikit-learn pandas
 ```
 
-Tested with: Python 3.11.9 · PyTorch 2.6.0+cu124 · transformers 5.2.0
+Tested with Python 3.11, PyTorch 2.6, CUDA 12.4.
 
-### Data
-
-The preprocessed CMU-MOSI data (`data/MOSI/embedding_and_mapping.pt`) is included in the repository. It contains aligned text/visual/acoustic features and train/dev/test splits.
-
----
-
-## Running
+### Reproduce Phase 1 (CMU-MOSI)
 
 ```bash
-python train.py
+cd phase1
+python src/train.py
 ```
 
-Training runs with the best-found configuration (P3-2, see below). Outputs epoch-level dev metrics and final test results. Best checkpoint is saved to `best_model.pt`.
+Preprocessed data must be at `data/MOSI/embedding_and_mapping.pt`. Training takes ~3 minutes on an RTX 3050 and reproduces MAE 0.812 / Acc-2 80.3%.
 
-GPU is used automatically if available. On an RTX 3050, training takes ~3 minutes.
+### Reproduce Phase 2 Best Model (MELD, Exp 9.1)
 
----
+```bash
+cd phase2
+jupyter notebook notebooks/03_mhft_ufen_best.ipynb
+```
 
-## Results
+Requires MultiEMO pre-extracted features (RoBERTa + openSMILE + DenseNet). See [`phase2/README.md`](phase2/README.md) for details.
 
-### Best Configuration (P3-2)
+### Build the Report
 
-The best test results were achieved with the following config, found after systematic search across 3 phases and 25+ experiments:
+```bash
+cd report
+pdflatex main.tex && bibtex main && pdflatex main.tex && pdflatex main.tex
+```
 
-| Hyperparameter | Value | Note |
-|---|---|---|
-| `d_m` | 128 | unimodal hidden dim |
-| `conv_dim` | 64 | Conv1D filters per branch |
-| `kernel_sizes` | `[1, 5]` | multi-scale local features |
-| `d_ff` | 128 | encoder-decoder FFN dim |
-| `lr` (non-BERT) | 5e-3 | paper Table 2 |
-| `lr_bert` | 2e-5 | separate low LR for BERT |
-| `use_bert_warmup` | True | 5-epoch linear ramp for BERT lr |
-| `use_lr_scheduler` | True | cosine annealing for both LRs |
-| `epochs` | 50 | `early_stop=15` |
-| `batch_size` | 32 | paper Table 2 |
-| `dropout` | 0.1 | paper Table 2 |
-| `att_dropout` | 0.2 | paper Table 2 |
+### Build the Presentation
 
-### Test Performance vs. Paper
-
-| Metric | **Ours (P3-2)** | Paper | Gap |
-|---|---|---|---|
-| MAE ↓ | **0.812** | 0.728 | +0.084 |
-| Corr ↑ | **0.745** | 0.792 | −0.047 |
-| Acc-7 ↑ | **43.0** | 46.7 | −3.7 pp |
-| Acc-2 (neg/non-neg) ↑ | **78.6** | 85.2 | −6.6 pp |
-| Acc-2 (neg/pos) ↑ | **80.3** | 86.6 | −6.3 pp |
-| F1 (neg/pos) ↑ | **80.4** | 86.7 | −6.3 pp |
-
-> Dev MAE reached **0.7434** at epoch 42 (within 0.015 of the paper), indicating the gap is primarily a dev/test generalisation issue rather than a capacity one.
+```bash
+cd presentation
+pdflatex presentation.tex && pdflatex presentation.tex
+```
 
 ---
 
-## Experiment Summary
+## Architecture at a Glance
 
-Full experiment details are in [`logs/experiments.md`](logs/experiments.md).
+Both phases share the same two-stage backbone:
 
-### Phase 1 — Single-parameter search (14 experiments)
+1. **UFEN (Unimodal Feature Extraction Network)** — one per modality. Bi-GRU → parallel Conv1D branches (kernels [1,5]) with self-attention gates → unpool → element-wise sum. Produces both a sequence representation and a unimodal prediction.
+2. **MTFN (Multi-task Transformer Fusion Network)** — six directed cross-modal attention pairs (t↔v, t↔a, v↔a) feed a Transformer encoder–decoder. Two fusion predictions (direct linear `Y_m` + encoder–decoder `Y'_m`).
 
-Varied `lr_bert`, `d_m`, `conv_dim`, `d_ff`, `kernel_sizes`, `grad_clip` one at a time from a paper-matching baseline.
+Training uses a **5-head multi-task loss** (3 unimodal + 2 multimodal).
 
-| Key finding | Best value | Impact |
-|---|---|---|
-| `d_ff=128` (1×d_m, not 2×d_m) | 128 | MAE: 0.903 → 0.827 |
-| `kernel_sizes=[1,5]` | [1, 5] | better than [1,3] default |
-| `lr_bert=2e-5` (vs 1e-5) | 2e-5 | faster BERT adaptation |
+**Phase 2 additions:**
+- **MHFT** front-end: maps utterance-level features (B, D) → (B, K=8, d_m) so UFEN can operate unchanged.
+- **Weighted cross-entropy + label smoothing** (replaces MSE).
+- **Exp 9.1** adds a speaker-disjoint dev split, capped class weights, and top-5 checkpoint ensembling.
 
-### Phase 2 — Combination experiments (7 experiments)
-
-Combined Phase 1 winners. Key discovery: **cosine LR scheduler + early_stop=15** was the single biggest unlock.
-
-| Exp | Key addition | MAE | Corr |
-|---|---|---|---|
-| P2-1 | d_ff=128 + lr_bert=2e-5 | 0.916 | 0.706 |
-| P2-4 | + kernel=[1,5] | 0.901 | 0.696 |
-| **P2-6.2** | **+ cosine LR + early_stop=15** | **0.828** | **0.749** |
-
-### Phase 3 — Regularization (5 experiments)
-
-Targeted the dev/test gap revealed in Phase 2.
-
-| Exp | Change | MAE | Corr | Acc-7 | Verdict |
-|---|---|---|---|---|---|
-| P3-1 | weight decay 0.01 | 1.017 | 0.672 | 33.7 | ❌ BERT collapse at ep4 |
-| **P3-2** | **BERT lr warmup** | **0.812** | **0.745** | **43.0** | **✅ best overall** |
-| P3-3 | dropout 0.2/att 0.3 | 0.880 | 0.711 | 39.4 | ❌ large dev/test gap |
-| P3-4 | weight decay + warmup | 1.015 | 0.650 | 31.8 | ❌ WD dominates |
-| P3-5 | AdamW + WD | 0.939 | 0.694 | 33.7 | ❌ worse than Adam |
-
-**Key insight:** BERT warmup (linear ramp from 0 → `lr_bert` over 5 epochs) eliminated the training instability in epochs 1–5 and produced the cleanest convergence curve. Weight decay, even moderate amounts, was catastrophic for BERT fine-tuning on this small dataset.
+See [`report/main.pdf`](report/main.pdf) §4 (Methodology) for full details and [`phase1/report/arch.png`](phase1/report/arch.png) for the architecture figure.
 
 ---
 
-## Key Architecture Decisions
+## Team
 
-Several aspects of the paper were underspecified. Full details are in [`assumptions.md`](assumptions.md). Major decisions:
+**TokeNization**
 
-1. **BERT as upstream feature extractor** — BERT outputs `last_hidden_state` (batch × 52 × 768) which feeds directly into the text UFEN, playing the same role as FACET (visual) and COVAREP (acoustic).
-2. **Separate BERT learning rate** — The paper's stated `lr=5e-3` applies only to non-BERT parameters. BERT is fine-tuned at `lr_bert=2e-5` (standard practice).
-3. **Output heads are linear, not softmax** — The paper describes `softmax(Wx+b)` for regression; this is clearly a misprint. All prediction heads are plain `Linear(d→1)` for continuous regression against MSE loss.
-4. **Mean-pool before encoder-decoder** — Each cross-modal attention output is mean-pooled over the query modality's time dimension to create a fixed-size (batch, d_m) vector; six such vectors are stacked into a 6-token sequence for the encoder-decoder.
-5. **No self-attention in decoder** — The paper's Eq. 13 describes only cross-attention in the decoder (no masked self-attention sub-layer). Implementation follows the paper literally.
+- Parth Tokekar
+- (team members)
+
+Course: Introduction to NLP (S26), IIIT Hyderabad.
 
 ---
 

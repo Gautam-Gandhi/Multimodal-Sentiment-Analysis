@@ -15,12 +15,14 @@ env/
 # Model checkpoints
 *.pth
 *.ckpt
-best_model.pt
-checkpoint*.pt
+*.pt
+checkpoints/
 
-# # Jupyter
-# .ipynb_checkpoints/
-# *.ipynb
+# Backup folder (local only)
+backup/
+
+# Jupyter
+.ipynb_checkpoints/
 
 # IDE
 .vscode/
@@ -32,9 +34,22 @@ checkpoint*.pt
 .DS_Store
 Thumbs.db
 
-# Logs (keep experiments.md, gitignore run artifacts)
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.nav
+*.snm
+*.toc
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+
+# Logs (keep experiments.md)
 logs/*.json
 logs/*.txt
 
-#data
+# Data (not tracked)
 data/*
