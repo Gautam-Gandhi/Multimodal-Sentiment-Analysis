@@ -60,6 +60,7 @@ Final evaluation uses $Y'_m$ (the encoder-decoder output head).
 
 ```
 phase1/
+├── data/MOSI/                 Preprocessed CMU-MOSI splits (embedding_and_mapping.pt)
 ├── src/
 │   ├── model.py               Full model: UFEN, CrossModalAttention, MTFN, MultiTaskModel
 │   ├── train.py               Training + evaluation pipeline with all hyperparameters

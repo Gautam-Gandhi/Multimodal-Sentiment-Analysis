@@ -1,0 +1,129 @@
+\documentclass[11pt]{article}
+
+% Change "review" to "final" to generate the final (sometimes called camera-ready) version.
+% Use "preprint" to show authors with page numbers
+\usepackage[preprint]{acl}
+
+% Standard package includes
+\usepackage{times}
+\usepackage{latexsym}
+
+% For proper rendering and hyphenation of words containing Latin characters
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% For better layout
+\usepackage{microtype}
+
+% For better typewriter font
+\usepackage{inconsolata}
+
+% For images
+\usepackage{graphicx}
+
+% For better tables
+\usepackage{booktabs}
+
+% For URLs
+\usepackage{hyperref}
+
+\title{Multimodal Emotion Recognition via Multi-Task Learning and Feature Fusion}
+
+\author{Gautam Gandhi, Manas Inamdar, Parth Tokekar, Soham Jahagirdar \\
+  IIIT Hyderabad \\
+  \\
+  \textbf{Team:} TokeNization \\
+  \\
+  \small{\texttt{\{gautam.gandhi, manas.inamdar, parth.tokekar, soham.jahagirdar\}@students.iiit.ac.in}}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Standard sentiment analysis models often rely heavily on textual data, which can lead to failures when interpreting ``mixed signals''---such as sarcasm or irony---where the text differs from the speaker's vocal tone or facial expression. To address this, we propose a multimodal approach that treats text, audio, and visual inputs as distinct but related subtasks. Our primary objective is to move beyond simple sentiment polarity (positive/negative) and perform fine-grained Emotion Recognition (e.g., Joy, Anger, Surprise). We aim to implement a robust architecture that fuses these modalities effectively to handle inconsistencies between them.
+\end{abstract}
+
+\section{Motivation \& Objective}
+
+Standard sentiment analysis models often rely heavily on textual data, which can lead to failures when interpreting ``mixed signals''---such as sarcasm or irony---where the text differs from the speaker's vocal tone or facial expression. To address this, we propose a multimodal approach that treats text, audio, and visual inputs as distinct but related subtasks.
+
+Our primary objective is to move beyond simple sentiment polarity (positive/negative) and perform fine-grained \textbf{Emotion Recognition} (e.g., Joy, Anger, Surprise). We aim to implement a robust architecture that fuses these modalities effectively to handle inconsistencies between them.
+
+\section{Background \& Related Work}
+
+Multimodal Sentiment Analysis (MSA) typically struggles with two issues: extracting high-quality features from individual modalities (intra-modal) and effectively fusing them (inter-modal).
+
+\begin{itemize}
+    \item \textbf{Base Architecture:} We will base our work on the paper \textit{``Multimodal sentiment analysis based on multi-layer feature fusion and multi-task learning''} \citep{cai2025multimodal}. This paper proposes a \textbf{Unimodal Feature Extraction Network (UFEN)} to capture context within single modalities using CNNs and Bi-GRUs, and a \textbf{Multi-Task Fusion Network (MTFN)} to fuse these features using cross-modal attention.
+    
+    \item \textbf{Gap Addressed:} The original paper and many baselines focus on regression (intensity prediction) or binary classification (positive/negative) on datasets like CMU-MOSI. Our project extends this architecture to the more complex task of \textbf{multi-class emotion classification} on the MELD dataset, as proposed in our interim submission.
+\end{itemize}
+
+\section{Dataset}
+
+We will utilize two datasets for this project:
+
+\begin{enumerate}
+    \item \textbf{CMU-MOSI (Baseline Validation):} A benchmark dataset containing 2,199 video clips labeled with sentiment intensity from -3 to +3. We will use this to validate our reproduction of the base paper's architecture.
+    
+    \item \textbf{MELD (Primary Experimentation):} The Multi-modal EmotionLines Dataset. Unlike MOSI, this dataset contains dialogue annotated with seven specific emotion labels (Anger, Disgust, Sadness, Joy, Neutral, Surprise, and Fear). This will be the target dataset for our extended classification task.
+\end{enumerate}
+
+\section{Proposed Methodology}
+
+Our methodology consists of two phases: reproduction and extension.
+
+\subsection{Phase 1: Architecture Reproduction (The Base Model)}
+
+We will implement the architecture described by \citet{cai2025multimodal} in Python:
+
+\begin{itemize}
+    \item \textbf{Feature Extraction (UFEN):}
+    \begin{itemize}
+        \item \textbf{Text:} We will use a pre-trained \textbf{BERT} model to extract textual features.
+        \item \textbf{Audio/Visual:} We will use \textbf{Bi-GRUs} and \textbf{1D Convolutional Neural Networks (Conv1D)} combined with \textbf{Self-Attention} to capture temporal and local features from audio and visual streams.
+    \end{itemize}
+    
+    \item \textbf{Fusion (MTFN):}
+    \begin{itemize}
+        \item We will implement \textbf{Cross-Modal Multi-Head Attention} to calculate the correlation between different modalities (e.g., Text-to-Audio, Text-to-Visual).
+        \item An \textbf{Encoder-Decoder} network will be used to reconstruct features and improve generalization.
+    \end{itemize}
+    
+    \item \textbf{Multi-Task Learning:} The model will be trained to simultaneously predict single-modal labels and the fused multi-modal label to balance performance.
+\end{itemize}
+
+\subsection{Phase 2: Adaptation for Emotion Recognition}
+
+We will modify the MTFN output layer. The original paper uses a regression output for sentiment intensity (MSE Loss). We will replace this with a classification head (Softmax) outputting probabilities for the 7 emotion classes found in MELD. We will retrain the model using \textbf{Cross-Entropy Loss}, optimizing for the detection of specific emotions rather than sentiment polarity.
+
+\section{Evaluation Options}
+
+We will evaluate our model using the following metrics, consistent with standard NLP practices and the project requirements:
+
+\begin{itemize}
+    \item \textbf{Quantitative Analysis:}
+    \begin{itemize}
+        \item \textbf{Accuracy (Acc-7):} To measure the classification performance across the 7 emotion categories.
+        \item \textbf{F1-Score:} Weighted F1-score to account for class imbalance in the MELD dataset.
+        \item \textbf{Confusion Matrix:} To visualize misclassifications (e.g., confusing ``Anger'' with ``Disgust'').
+    \end{itemize}
+    
+    \item \textbf{Qualitative Analysis:} We will select specific test cases (video clips) where the text contradicts the facial expression (sarcasm) and analyze the attention weights to see if the model correctly prioritized visual/audio cues over text.
+\end{itemize}
+
+\section{Tentative Timeline}
+
+\begin{itemize}
+    \item \textbf{Feb 1 -- Feb 20:} Preprocessing of CMU-MOSI data and implementation of the base UFEN and MTFN architecture.
+    \item \textbf{Feb 21 -- Feb 28:} Validation of the base model on CMU-MOSI (Goal: Match results in \citet{cai2025multimodal}).
+    \item \textbf{Mar 1 -- Mar 8:} \textbf{Mid Submission (Due Mar 8)} -- Report on reproduction progress and initial setup of MELD dataset.
+    \item \textbf{Mar 9 -- Mar 25:} Adaptation of architecture for MELD (changing loss functions and output heads) and training on emotion classes.
+    \item \textbf{Mar 26 -- Apr 1:} Ablation studies (analyzing the impact of removing audio or visual modules).
+    \item \textbf{Apr 2 -- Apr 8:} Final Report writing, qualitative analysis, and presentation preparation. \textbf{Final Submission (Due Apr 8)}.
+\end{itemize}
+
+\bibliographystyle{acl_natbib}
+\bibliography{custom}
+
+\end{document}
